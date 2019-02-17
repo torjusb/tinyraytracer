@@ -67,11 +67,9 @@ fn scene_intersect<'a>(orig: &Vec3f, dir: &Vec3f, spheres: &'a Vec<Sphere>) -> O
         .iter()
         // Are there other methods which can be used, so we only need to
         // iterate a single time?
-        .filter_map(|sphere| {
-            if let Some(distance) = sphere.ray_intersect(&orig, &dir) {
-                return Some((distance, sphere));
-            }
-            None
+        .filter_map(|sphere| match sphere.ray_intersect(&orig, &dir) {
+            Some(distance) => Some((distance, sphere)),
+            None => None,
         })
         .min_by_key(|(distance, _)| *distance as u32);
 
