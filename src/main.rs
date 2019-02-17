@@ -3,12 +3,32 @@ use std::io::prelude::*;
 
 type Vec3f = [f32; 3];
 
+#[derive(Copy, Clone)]
+struct Material {
+    diffuse_color: Vec3f,
+}
+
+impl Material {
+    fn new(diffuse_color: Vec3f) -> Self {
+        Self { diffuse_color }
+    }
+}
+
 struct Sphere {
     center: Vec3f,
     radius: f32,
+    material: Material,
 }
 
 impl Sphere {
+    fn new(center: Vec3f, radius: f32, material: Material) -> Self {
+        Self {
+            center,
+            radius,
+            material,
+        }
+    }
+
     fn ray_intersect(&self, orig: &Vec3f, dir: &Vec3f) -> Option<f32> {
         let l = sub_vec(&self.center, &orig);
         let tca = dot_vec(&l, &dir);
@@ -41,6 +61,33 @@ impl Sphere {
     }
 }
 
+fn scene_intersect<'a>(orig: &Vec3f, dir: &Vec3f, spheres: &'a Vec<Sphere>) -> Option<&'a Sphere> {
+    // Find the closest intersecting sphere
+    let closest_intersecting = spheres
+        .iter()
+        // Are there other methods which can be used, so we only need to
+        // iterate a single time?
+        .filter_map(|sphere| {
+            if let Some(distance) = sphere.ray_intersect(&orig, &dir) {
+                return Some((distance, sphere));
+            }
+            None
+        })
+        .min_by_key(|(distance, _)| *distance as u32);
+
+    match closest_intersecting {
+        Some((_, sphere)) => Some(sphere),
+        None => None,
+    }
+}
+
+fn cast_ray(orig: &Vec3f, dir: &Vec3f, spheres: &Vec<Sphere>) -> Vec3f {
+    match scene_intersect(orig, dir, spheres) {
+        Some(sphere) => sphere.material.diffuse_color,
+        None => [0.2, 0.7, 0.8], // Background color
+    }
+}
+
 fn sub_vec(a: &Vec3f, b: &Vec3f) -> Vec3f {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
@@ -66,7 +113,7 @@ fn normalize_vec(vec: &Vec3f) -> Vec3f {
     [vec[0] * inv_len, vec[1] * inv_len, vec[2] * inv_len]
 }
 
-fn render(sphere: &Sphere) -> std::io::Result<()> {
+fn render(spheres: &Vec<Sphere>) -> std::io::Result<()> {
     const WIDTH: usize = 1024;
     const HEIGHT: usize = 768;
     const FOV: f32 = std::f32::consts::PI / 2.0;
@@ -81,7 +128,7 @@ fn render(sphere: &Sphere) -> std::io::Result<()> {
                     / HEIGHT as f32;
             let y = -(2.0 * (j as f32 + 0.5) / HEIGHT as f32 - 1.0) * (FOV / 2.0).tan();
             let dir = normalize_vec(&[x, y, -1.0]);
-            framebuffer[i + j * WIDTH] = sphere.cast_ray(&[0.0, 0.0, 0.0], &dir);
+            framebuffer[i + j * WIDTH] = cast_ray(&[0.0, 0.0, 0.0], &dir, &spheres);
         }
     }
 
@@ -101,9 +148,14 @@ fn render(sphere: &Sphere) -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    let sphere = Sphere {
-        center: [-3.0, 0.0, -16.0],
-        radius: 2.0,
-    };
-    render(&sphere)
+    let ivory = Material::new([0.4, 0.4, 0.3]);
+    let red_rubber = Material::new([0.3, 0.1, 0.1]);
+
+    let mut spheres = vec![];
+    spheres.push(Sphere::new([7., 5., -18.], 4.0, ivory));
+    spheres.push(Sphere::new([-3.0, 0.0, -16.0], 2.0, ivory));
+    spheres.push(Sphere::new([-1.0, -1.5, -12.], 2.0, red_rubber));
+    spheres.push(Sphere::new([1.5, -0.5, -18.], 3.0, red_rubber));
+
+    render(&spheres)
 }
