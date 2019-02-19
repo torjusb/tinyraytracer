@@ -14,6 +14,20 @@ impl Material {
     }
 }
 
+struct Light {
+    position: Vec3f,
+    intensity: f32,
+}
+
+impl Light {
+    fn new(position: Vec3f, intensity: f32) -> Self {
+        Self {
+            position,
+            intensity,
+        }
+    }
+}
+
 struct Sphere {
     center: Vec3f,
     radius: f32,
@@ -61,7 +75,11 @@ impl Sphere {
     }
 }
 
-fn scene_intersect<'a>(orig: &Vec3f, dir: &Vec3f, spheres: &'a Vec<Sphere>) -> Option<&'a Sphere> {
+fn scene_intersect<'a>(
+    orig: &Vec3f,
+    dir: &Vec3f,
+    spheres: &'a Vec<Sphere>,
+) -> Option<(&'a Sphere, Vec3f)> {
     // Find the closest intersecting sphere
     let closest_intersecting = spheres
         .iter()
@@ -74,20 +92,39 @@ fn scene_intersect<'a>(orig: &Vec3f, dir: &Vec3f, spheres: &'a Vec<Sphere>) -> O
         .min_by_key(|(distance, _)| *distance as u32);
 
     match closest_intersecting {
-        Some((_, sphere)) => Some(sphere),
+        Some((distance, sphere)) => {
+            let hit = add_vec(&orig, &mul_with_f(&dir, distance));
+            let n = normalize_vec(&sub_vec(&hit, &sphere.center));
+            Some((sphere, n))
+        }
         None => None,
     }
 }
 
-fn cast_ray(orig: &Vec3f, dir: &Vec3f, spheres: &Vec<Sphere>) -> Vec3f {
+fn cast_ray(orig: &Vec3f, dir: &Vec3f, spheres: &Vec<Sphere>, lights: &Vec<Light>) -> Vec3f {
     match scene_intersect(orig, dir, spheres) {
-        Some(sphere) => sphere.material.diffuse_color,
+        Some((sphere, n)) => {
+            let mut diffuse_light_intensity = 0.0;
+            for light in lights {
+                let light_dir = normalize_vec(&light.position);
+                diffuse_light_intensity += light.intensity * 0.0_f32.max(dot_vec(&light_dir, &n));
+            }
+            mul_with_f(&sphere.material.diffuse_color, diffuse_light_intensity)
+        }
         None => [0.2, 0.7, 0.8], // Background color
     }
 }
 
 fn sub_vec(a: &Vec3f, b: &Vec3f) -> Vec3f {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn add_vec(a: &Vec3f, b: &Vec3f) -> Vec3f {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn mul_with_f(a: &Vec3f, b: f32) -> Vec3f {
+    [a[0] * b, a[1] * b, a[2] * b]
 }
 
 fn mul_vec(a: &Vec3f, b: &Vec3f) -> Vec3f {
@@ -111,7 +148,7 @@ fn normalize_vec(vec: &Vec3f) -> Vec3f {
     [vec[0] * inv_len, vec[1] * inv_len, vec[2] * inv_len]
 }
 
-fn render(spheres: &Vec<Sphere>) -> std::io::Result<()> {
+fn render(spheres: &Vec<Sphere>, lights: &Vec<Light>) -> std::io::Result<()> {
     const WIDTH: usize = 1024;
     const HEIGHT: usize = 768;
     const FOV: f32 = std::f32::consts::PI / 2.0;
@@ -126,7 +163,7 @@ fn render(spheres: &Vec<Sphere>) -> std::io::Result<()> {
                     / HEIGHT as f32;
             let y = -(2.0 * (j as f32 + 0.5) / HEIGHT as f32 - 1.0) * (FOV / 2.0).tan();
             let dir = normalize_vec(&[x, y, -1.0]);
-            framebuffer[i + j * WIDTH] = cast_ray(&[0.0, 0.0, 0.0], &dir, &spheres);
+            framebuffer[i + j * WIDTH] = cast_ray(&[0.0, 0.0, 0.0], &dir, &spheres, &lights);
         }
     }
 
@@ -155,5 +192,8 @@ fn main() -> std::io::Result<()> {
     spheres.push(Sphere::new([-1.0, -1.5, -12.], 2.0, red_rubber));
     spheres.push(Sphere::new([1.5, -0.5, -18.], 3.0, red_rubber));
 
-    render(&spheres)
+    let mut lights = vec![];
+    lights.push(Light::new([-20., 20., 20.], 1.5));
+
+    render(&spheres, &lights)
 }
