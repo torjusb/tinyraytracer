@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Mul, Neg, Sub};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vec3f(pub f32, pub f32, pub f32);
@@ -55,5 +55,22 @@ impl Mul<f32> for Vec3f {
 
     fn mul(self, other: f32) -> Self {
         Self(self.0 * other, self.1 * other, self.2 * other)
+    }
+}
+
+impl Neg for Vec3f {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self(-self.0, -self.1, -self.2)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Vec2f(pub f32, pub f32);
+
+impl Vec2f {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(x, y)
     }
 }

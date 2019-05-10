@@ -3,16 +3,22 @@ use std::io::prelude::*;
 
 mod vector;
 
-use vector::Vec3f;
+use vector::{Vec2f, Vec3f};
 
 #[derive(Copy, Clone)]
 struct Material {
     diffuse_color: Vec3f,
+    albedo: Vec2f,
+    specular_exponent: f32,
 }
 
 impl Material {
-    fn new(diffuse_color: Vec3f) -> Self {
-        Self { diffuse_color }
+    fn new(albedo: Vec2f, diffuse_color: Vec3f, specular_exponent: f32) -> Self {
+        Self {
+            albedo,
+            diffuse_color,
+            specular_exponent,
+        }
     }
 }
 
@@ -69,11 +75,15 @@ impl Sphere {
     }
 }
 
+fn reflect(light_dir: &Vec3f, n: &Vec3f) -> Vec3f {
+    *light_dir * (*n * 2.0 * (*light_dir * *n))
+}
+
 fn scene_intersect<'a>(
     orig: &Vec3f,
     dir: &Vec3f,
     spheres: &'a Vec<Sphere>,
-) -> Option<(&'a Sphere, Vec3f)> {
+) -> Option<(&'a Sphere, Vec3f, Vec3f)> {
     // Find the closest intersecting sphere
     let closest_intersecting = spheres
         .iter()
@@ -89,7 +99,7 @@ fn scene_intersect<'a>(
         Some((distance, sphere)) => {
             let hit = *orig + (*dir * distance);
             let n = (hit - sphere.center).normalize();
-            Some((sphere, n))
+            Some((sphere, n, hit))
         }
         None => None,
     }
@@ -97,13 +107,25 @@ fn scene_intersect<'a>(
 
 fn cast_ray(orig: &Vec3f, dir: &Vec3f, spheres: &Vec<Sphere>, lights: &Vec<Light>) -> Vec3f {
     match scene_intersect(orig, dir, spheres) {
-        Some((sphere, n)) => {
+        Some((sphere, n, hit)) => {
             let mut diffuse_light_intensity = 0.0;
+            let mut specular_light_intensity = 0.0;
             for light in lights {
-                let light_dir = light.position.normalize();
+                let light_dir = (light.position - hit).normalize();
+
                 diffuse_light_intensity += light.intensity * 0.0_f32.max(light_dir.dot(&n));
+                specular_light_intensity += (0.0_f32
+                    .max((-reflect(&-light_dir, &n)).dot(dir))
+                    .powf(sphere.material.specular_exponent))
+                    * light.intensity;
             }
-            sphere.material.diffuse_color * diffuse_light_intensity
+
+            // return material.diffuse_color * diffuse_light_intensity * material.albedo[0] +
+            // Vec3f(1., 1., 1.)*specular_light_intensity * material.albedo[1];
+            let material = sphere.material;
+            let r = ((material.diffuse_color * diffuse_light_intensity) * material.albedo.0)
+                + (Vec3f::new(1.0, 1.0, 1.0) * (specular_light_intensity * material.albedo.1));
+            r
         }
         None => Vec3f::new(0.2, 0.7, 0.8), // Background color
     }
@@ -151,8 +173,8 @@ fn render(spheres: &Vec<Sphere>, lights: &Vec<Light>) -> std::io::Result<()> {
 }
 
 fn main() -> std::io::Result<()> {
-    let ivory = Material::new(Vec3f::new(0.4, 0.4, 0.3));
-    let red_rubber = Material::new(Vec3f::new(0.3, 0.1, 0.1));
+    let ivory = Material::new(Vec2f::new(0.6, 0.3), Vec3f::new(0.4, 0.4, 0.3), 50.0);
+    let red_rubber = Material::new(Vec2f::new(0.9, 0.1), Vec3f::new(0.3, 0.1, 0.1), 10.0);
 
     let mut spheres = vec![];
     spheres.push(Sphere::new(Vec3f::new(7., 5., -18.), 4.0, ivory));
@@ -162,6 +184,8 @@ fn main() -> std::io::Result<()> {
 
     let mut lights = vec![];
     lights.push(Light::new(Vec3f::new(-20., 20., 20.), 1.5));
+    lights.push(Light::new(Vec3f::new(30., 50., -25.), 1.8));
+    lights.push(Light::new(Vec3f::new(30., 20., 30.), 1.7));
 
     render(&spheres, &lights)
 }
